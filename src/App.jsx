@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, Copy, Download, Loader2, Sparkles, Trash2, Volume2 } from 'lucide-react';
+import { Bot, Copy, Download, FileText, Loader2, Sparkles, Trash2, Upload, Volume2 } from 'lucide-react';
 
 const exemplo = 'A inteligência artificial pode ajudar pequenas equipas a transformar textos, ideias e pesquisas em guiões de podcast mais claros, rápidos e envolventes.';
 
@@ -19,6 +19,15 @@ const vozes = [
   { value: 'verse', label: 'Verse' }
 ];
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function App() {
   const [baseText, setBaseText] = useState('');
   const [script, setScript] = useState('Host: Olá! Bem-vindo ao Audio Neural Podcast.\nConvidado: Obrigado pelo convite. Vamos começar?');
@@ -26,6 +35,9 @@ export default function App() {
   const [duration, setDuration] = useState('3 a 5 minutos');
   const [audience, setAudience] = useState('público geral');
   const [voice, setVoice] = useState('nova');
+  const [pdfName, setPdfName] = useState('');
+  const [pdfInfo, setPdfInfo] = useState('');
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState('');
   const [audioLoading, setAudioLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,11 +45,49 @@ export default function App() {
   const [audioError, setAudioError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  async function processarPdf(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setError('');
+    setPdfInfo('');
+    if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Envie um arquivo PDF.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('O PDF precisa ter até 10 MB.');
+      return;
+    }
+
+    setPdfLoading(true);
+    setPdfName(file.name);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const res = await fetch('/api/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: dataUrl, fileName: file.name })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao ler o PDF.');
+      setBaseText(data.text);
+      setPdfInfo(`${data.fileName || file.name}${data.pages ? ` · ${data.pages} página(s)` : ''} · texto extraído com sucesso`);
+      limparAudio();
+    } catch (err) {
+      setError(err.message || 'Erro ao processar o PDF.');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   async function gerar() {
     setError('');
     const text = baseText.trim();
     if (!text) {
-      setError('Cole um tema, artigo ou briefing antes de gerar.');
+      setError('Cole um tema, artigo, briefing ou envie um PDF antes de gerar.');
       return;
     }
     setLoading(true);
@@ -126,17 +176,31 @@ export default function App() {
             <Bot />
             <span className="text-sm font-semibold uppercase tracking-[0.25em]">Audio Neural Podcast</span>
           </div>
-          <h1 className="text-4xl font-black md:text-6xl">Transforme qualquer texto em guião e áudio de podcast com IA.</h1>
-          <p className="mt-4 max-w-3xl text-lg text-slate-300">Cole um artigo, ideia ou briefing. O app cria uma conversa pronta entre Host e Convidado e depois gera o áudio com voz neural da OpenAI.</p>
+          <h1 className="text-4xl font-black md:text-6xl">Transforme textos e PDFs em guião e áudio de podcast com IA.</h1>
+          <p className="mt-4 max-w-3xl text-lg text-slate-300">Cole um texto ou envie um PDF. O app extrai o conteúdo, cria uma conversa pronta entre Host e Convidado e gera o áudio com voz neural da OpenAI.</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-slate-900 p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-2xl font-bold">Conteúdo base</h2>
               <button onClick={() => setBaseText(exemplo)} className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">Usar exemplo</button>
             </div>
-            <textarea value={baseText} onChange={e => setBaseText(e.target.value)} placeholder="Cole aqui o tema, texto ou briefing do podcast..." className="h-72 w-full resize-none rounded-2xl border border-white/10 bg-slate-950 p-4 text-slate-100 outline-none focus:border-cyan-400" />
+
+            <label className="mb-4 flex cursor-pointer items-center justify-center gap-3 rounded-2xl border border-dashed border-cyan-400/50 bg-cyan-400/10 p-5 text-center font-bold text-cyan-100 hover:bg-cyan-400/20">
+              {pdfLoading ? <Loader2 className="animate-spin" /> : <Upload />}
+              <span>{pdfLoading ? 'Lendo PDF...' : 'Enviar PDF como input'}</span>
+              <input type="file" accept="application/pdf,.pdf" onChange={processarPdf} disabled={pdfLoading} className="hidden" />
+            </label>
+
+            {(pdfName || pdfInfo) && (
+              <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950 p-3 text-sm text-slate-300">
+                <p className="flex items-center gap-2 font-bold text-cyan-200"><FileText className="h-4 w-4" />{pdfName || 'PDF carregado'}</p>
+                {pdfInfo && <p className="mt-1 text-slate-400">{pdfInfo}</p>}
+              </div>
+            )}
+
+            <textarea value={baseText} onChange={e => setBaseText(e.target.value)} placeholder="Cole aqui o tema, texto, briefing ou envie um PDF acima..." className="h-64 w-full resize-none rounded-2xl border border-white/10 bg-slate-950 p-4 text-slate-100 outline-none focus:border-cyan-400" />
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <input value={tone} onChange={e => setTone(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Tom" />
@@ -145,7 +209,7 @@ export default function App() {
             </div>
 
             {error && <p className="mt-4 rounded-xl border border-red-400/30 bg-red-950/50 p-3 text-red-200">{error}</p>}
-            <button onClick={gerar} disabled={loading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-5 py-4 font-black text-slate-950 disabled:opacity-60">
+            <button onClick={gerar} disabled={loading || pdfLoading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-5 py-4 font-black text-slate-950 disabled:opacity-60">
               {loading ? <Loader2 className="animate-spin" /> : <Sparkles />}
               {loading ? 'Gerando...' : 'Gerar guião com IA'}
             </button>
