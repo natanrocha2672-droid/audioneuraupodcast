@@ -2,22 +2,8 @@ import React, { useState } from 'react';
 import { Bot, Copy, Download, FileText, Loader2, Sparkles, Trash2, Upload, Volume2 } from 'lucide-react';
 
 const exemplo = 'A inteligência artificial pode ajudar pequenas equipas a transformar textos, ideias e pesquisas em guiões de podcast mais claros, rápidos e envolventes.';
-
-const vozes = [
-  { value: 'nova', label: 'Neural OpenAI - Nova' },
-  { value: 'marin', label: 'Premium - Marin' },
-  { value: 'cedar', label: 'Premium - Cedar' },
-  { value: 'coral', label: 'Coral' },
-  { value: 'alloy', label: 'Alloy' },
-  { value: 'ash', label: 'Ash' },
-  { value: 'ballad', label: 'Ballad' },
-  { value: 'echo', label: 'Echo' },
-  { value: 'fable', label: 'Fable' },
-  { value: 'onyx', label: 'Onyx' },
-  { value: 'sage', label: 'Sage' },
-  { value: 'shimmer', label: 'Shimmer' },
-  { value: 'verse', label: 'Verse' }
-];
+const vozes = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
+const labels = { nova: 'Neural OpenAI - Nova', onyx: 'Convidado - Onyx', marin: 'Premium - Marin', cedar: 'Premium - Cedar' };
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -34,7 +20,8 @@ export default function App() {
   const [tone, setTone] = useState('profissional e envolvente');
   const [duration, setDuration] = useState('3 a 5 minutos');
   const [audience, setAudience] = useState('público geral');
-  const [voice, setVoice] = useState('nova');
+  const [hostVoice, setHostVoice] = useState('nova');
+  const [guestVoice, setGuestVoice] = useState('onyx');
   const [pdfName, setPdfName] = useState('');
   const [pdfInfo, setPdfInfo] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -45,32 +32,25 @@ export default function App() {
   const [audioError, setAudioError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  function limparAudio() {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl('');
+    setAudioError('');
+  }
+
   async function processarPdf(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
     setError('');
     setPdfInfo('');
     if (!file) return;
-
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Envie um arquivo PDF.');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError('O PDF precisa ter até 10 MB.');
-      return;
-    }
-
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return setError('Envie um arquivo PDF.');
+    if (file.size > 10 * 1024 * 1024) return setError('O PDF precisa ter até 10 MB.');
     setPdfLoading(true);
     setPdfName(file.name);
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const res = await fetch('/api/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: dataUrl, fileName: file.name })
-      });
+      const res = await fetch('/api/pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: dataUrl, fileName: file.name }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao ler o PDF.');
       setBaseText(data.text);
@@ -86,17 +66,10 @@ export default function App() {
   async function gerar() {
     setError('');
     const text = baseText.trim();
-    if (!text) {
-      setError('Cole um tema, artigo, briefing ou envie um PDF antes de gerar.');
-      return;
-    }
+    if (!text) return setError('Cole um tema, artigo, briefing ou envie um PDF antes de gerar.');
     setLoading(true);
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, tone, duration, audience })
-      });
+      const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, tone, duration, audience }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao gerar o guião.');
       setScript(data.script);
@@ -108,32 +81,17 @@ export default function App() {
     }
   }
 
-  function limparAudio() {
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl('');
-    setAudioError('');
-  }
-
   async function gerarAudio() {
     setAudioError('');
     const input = script.trim();
-    if (!input) {
-      setAudioError('Gere ou escreva um guião antes de criar o áudio.');
-      return;
-    }
+    if (!input) return setAudioError('Gere ou escreva um guião antes de criar o áudio.');
     setAudioLoading(true);
     try {
-      const res = await fetch('/api/audio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input, voice })
-      });
-
+      const res = await fetch('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: input, hostVoice, guestVoice }) });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Erro ao gerar áudio.');
       }
-
       const blob = await res.blob();
       limparAudio();
       setAudioUrl(URL.createObjectURL(blob));
@@ -164,7 +122,7 @@ export default function App() {
     if (!audioUrl) return;
     const a = document.createElement('a');
     a.href = audioUrl;
-    a.download = 'audio-neural-podcast.mp3';
+    a.download = 'audio-neural-podcast.wav';
     a.click();
   }
 
@@ -172,81 +130,33 @@ export default function App() {
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto max-w-6xl px-5 py-10">
         <div className="mb-8 rounded-3xl border border-cyan-400/20 bg-slate-900/80 p-8 shadow-2xl">
-          <div className="mb-4 flex items-center gap-3 text-cyan-300">
-            <Bot />
-            <span className="text-sm font-semibold uppercase tracking-[0.25em]">Audio Neural Podcast</span>
-          </div>
-          <h1 className="text-4xl font-black md:text-6xl">Transforme textos e PDFs em guião e áudio de podcast com IA.</h1>
-          <p className="mt-4 max-w-3xl text-lg text-slate-300">Cole um texto ou envie um PDF. O app extrai o conteúdo, cria uma conversa pronta entre Host e Convidado e gera o áudio com voz neural da OpenAI.</p>
+          <div className="mb-4 flex items-center gap-3 text-cyan-300"><Bot /><span className="text-sm font-semibold uppercase tracking-[0.25em]">Audio Neural Podcast</span></div>
+          <h1 className="text-4xl font-black md:text-6xl">Transforme textos e PDFs em podcast com duas vozes neurais.</h1>
+          <p className="mt-4 max-w-3xl text-lg text-slate-300">O app extrai texto de PDF, cria o guião e gera áudio com voz diferente para Host e Convidado, sem falar os rótulos.</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-slate-900 p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-bold">Conteúdo base</h2>
-              <button onClick={() => setBaseText(exemplo)} className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">Usar exemplo</button>
-            </div>
-
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-bold">Conteúdo base</h2><button onClick={() => setBaseText(exemplo)} className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">Usar exemplo</button></div>
             <label className="mb-4 flex cursor-pointer items-center justify-center gap-3 rounded-2xl border border-dashed border-cyan-400/50 bg-cyan-400/10 p-5 text-center font-bold text-cyan-100 hover:bg-cyan-400/20">
-              {pdfLoading ? <Loader2 className="animate-spin" /> : <Upload />}
-              <span>{pdfLoading ? 'Lendo PDF...' : 'Enviar PDF como input'}</span>
-              <input type="file" accept="application/pdf,.pdf" onChange={processarPdf} disabled={pdfLoading} className="hidden" />
+              {pdfLoading ? <Loader2 className="animate-spin" /> : <Upload />}<span>{pdfLoading ? 'Lendo PDF...' : 'Enviar PDF como input'}</span><input type="file" accept="application/pdf,.pdf" onChange={processarPdf} disabled={pdfLoading} className="hidden" />
             </label>
-
-            {(pdfName || pdfInfo) && (
-              <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950 p-3 text-sm text-slate-300">
-                <p className="flex items-center gap-2 font-bold text-cyan-200"><FileText className="h-4 w-4" />{pdfName || 'PDF carregado'}</p>
-                {pdfInfo && <p className="mt-1 text-slate-400">{pdfInfo}</p>}
-              </div>
-            )}
-
+            {(pdfName || pdfInfo) && <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950 p-3 text-sm text-slate-300"><p className="flex items-center gap-2 font-bold text-cyan-200"><FileText className="h-4 w-4" />{pdfName || 'PDF carregado'}</p>{pdfInfo && <p className="mt-1 text-slate-400">{pdfInfo}</p>}</div>}
             <textarea value={baseText} onChange={e => setBaseText(e.target.value)} placeholder="Cole aqui o tema, texto, briefing ou envie um PDF acima..." className="h-64 w-full resize-none rounded-2xl border border-white/10 bg-slate-950 p-4 text-slate-100 outline-none focus:border-cyan-400" />
-
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <input value={tone} onChange={e => setTone(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Tom" />
-              <input value={duration} onChange={e => setDuration(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Duração" />
-              <input value={audience} onChange={e => setAudience(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Público" />
-            </div>
-
+            <div className="mt-4 grid gap-3 md:grid-cols-3"><input value={tone} onChange={e => setTone(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Tom" /><input value={duration} onChange={e => setDuration(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Duração" /><input value={audience} onChange={e => setAudience(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3" placeholder="Público" /></div>
             {error && <p className="mt-4 rounded-xl border border-red-400/30 bg-red-950/50 p-3 text-red-200">{error}</p>}
-            <button onClick={gerar} disabled={loading || pdfLoading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-5 py-4 font-black text-slate-950 disabled:opacity-60">
-              {loading ? <Loader2 className="animate-spin" /> : <Sparkles />}
-              {loading ? 'Gerando...' : 'Gerar guião com IA'}
-            </button>
+            <button onClick={gerar} disabled={loading || pdfLoading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-5 py-4 font-black text-slate-950 disabled:opacity-60">{loading ? <Loader2 className="animate-spin" /> : <Sparkles />}{loading ? 'Gerando...' : 'Gerar guião com IA'}</button>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-slate-900 p-6">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-bold">Guião gerado</h2>
-              <div className="flex gap-2">
-                <button onClick={copiar} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Copy className="mr-1 inline h-4 w-4" />{copied ? 'Copiado' : 'Copiar'}</button>
-                <button onClick={baixar} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Download className="mr-1 inline h-4 w-4" />TXT</button>
-                <button onClick={() => { setScript(''); limparAudio(); }} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Trash2 className="mr-1 inline h-4 w-4" />Limpar</button>
-              </div>
-            </div>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-bold">Guião gerado</h2><div className="flex gap-2"><button onClick={copiar} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Copy className="mr-1 inline h-4 w-4" />{copied ? 'Copiado' : 'Copiar'}</button><button onClick={baixar} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Download className="mr-1 inline h-4 w-4" />TXT</button><button onClick={() => { setScript(''); limparAudio(); }} className="rounded-xl bg-white/10 px-4 py-2 text-sm font-bold"><Trash2 className="mr-1 inline h-4 w-4" />Limpar</button></div></div>
             <textarea value={script} onChange={e => { setScript(e.target.value); limparAudio(); }} className="h-80 w-full resize-none rounded-2xl border border-white/10 bg-slate-950 p-4 leading-relaxed text-slate-100 outline-none focus:border-fuchsia-400" />
-
             <div className="mt-5 rounded-2xl border border-cyan-400/20 bg-slate-950 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h3 className="flex items-center gap-2 text-lg font-black text-cyan-200"><Volume2 /> Gerar áudio neural</h3>
-                  <p className="text-sm text-slate-400">O áudio é gerado por IA e não é uma voz humana real.</p>
-                </div>
-                <select value={voice} onChange={e => setVoice(e.target.value)} className="rounded-xl border border-white/10 bg-slate-900 p-3 text-sm font-bold">
-                  {vozes.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
+              <div className="flex flex-col gap-3"><h3 className="flex items-center gap-2 text-lg font-black text-cyan-200"><Volume2 /> Gerar áudio com duas vozes</h3><p className="text-sm text-slate-400">Host e Convidado usam vozes diferentes. Os rótulos “Host:” e “Convidado:” são removidos antes da narração.</p>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold text-slate-300">Voz do Host<select value={hostVoice} onChange={e => setHostVoice(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm font-bold">{vozes.map(v => <option key={v} value={v}>{labels[v] || v}</option>)}</select></label><label className="text-sm font-bold text-slate-300">Voz do Convidado<select value={guestVoice} onChange={e => setGuestVoice(e.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-sm font-bold">{vozes.map(v => <option key={v} value={v}>{labels[v] || v}</option>)}</select></label></div>
               </div>
-
               {audioError && <p className="mt-4 rounded-xl border border-red-400/30 bg-red-950/50 p-3 text-red-200">{audioError}</p>}
-
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <button onClick={gerarAudio} disabled={audioLoading} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 font-black text-slate-950 disabled:opacity-60">
-                  {audioLoading ? <Loader2 className="animate-spin" /> : <Volume2 />}
-                  {audioLoading ? 'Gerando MP3...' : 'Gerar áudio MP3'}
-                </button>
-                {audioUrl && <button onClick={baixarAudio} className="rounded-2xl bg-white/10 px-5 py-3 font-black"><Download className="mr-1 inline h-4 w-4" />Baixar MP3</button>}
-              </div>
-
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row"><button onClick={gerarAudio} disabled={audioLoading} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 font-black text-slate-950 disabled:opacity-60">{audioLoading ? <Loader2 className="animate-spin" /> : <Volume2 />}{audioLoading ? 'Gerando áudio...' : 'Gerar áudio com 2 vozes'}</button>{audioUrl && <button onClick={baixarAudio} className="rounded-2xl bg-white/10 px-5 py-3 font-black"><Download className="mr-1 inline h-4 w-4" />Baixar WAV</button>}</div>
               {audioUrl && <audio className="mt-4 w-full" controls src={audioUrl} />}
             </div>
           </div>
