@@ -11,7 +11,8 @@
     "react": "latest",
     "react-dom": "latest",
     "lucide-react": "latest",
-    "openai": "latest"
+    "openai": "latest",
+    "pdf-parse": "1.1.1"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17",
